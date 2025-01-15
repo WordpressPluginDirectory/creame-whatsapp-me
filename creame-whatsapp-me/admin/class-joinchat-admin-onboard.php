@@ -27,10 +27,12 @@ class Joinchat_Admin_Onboard {
 		$title = esc_html__( 'Welcome to Joinchat', 'creame-whatsapp-me' );
 
 		if ( Joinchat_Util::options_submenu() ) {
-			add_options_page( $title, $title, Joinchat_Util::capability(), 'joinchat-onboard', array( $this, 'options_page' ) );
+			$page_hook = add_options_page( $title, $title, Joinchat_Util::capability(), 'joinchat-onboard', array( $this, 'options_page' ) );
 		} else {
-			add_submenu_page( JOINCHAT_SLUG, $title, $title, Joinchat_Util::capability(), 'joinchat-onboard', array( $this, 'options_page' ) );
+			$page_hook = add_submenu_page( JOINCHAT_SLUG, $title, $title, Joinchat_Util::capability(), 'joinchat-onboard', array( $this, 'options_page' ) );
 		}
+
+		add_action( "load-{$page_hook}", function() { do_action( 'load_joinchat_onboard_page' ); } ); // phpcs:ignore
 
 	}
 
@@ -172,7 +174,7 @@ class Joinchat_Admin_Onboard {
 		$config = array(
 			'settings_url' => add_query_arg( 'onboard', 'no', Joinchat_Util::admin_url() ),
 			'img_base'     => plugins_url( 'img/', __FILE__ ),
-			'user_email'   => $user->user_email,
+			'user_email'   => '',
 			'nonce'        => wp_create_nonce( 'joinchat_onboard' ),
 		);
 
@@ -232,7 +234,8 @@ class Joinchat_Admin_Onboard {
 
 		check_ajax_referer( 'joinchat_onboard', 'nonce', true );
 
-		$data = $_POST['data'];
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.MissingUnslash,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+		$data = isset( $_POST['data'] ) ? Joinchat_Util::clean_input( (array) $_POST['data'] ) : array();
 
 		// Save settings.
 		$settings = array_merge( jc_common()->settings, $data );

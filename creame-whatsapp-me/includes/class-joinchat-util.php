@@ -43,6 +43,8 @@ class Joinchat_Util {
 	 * @return   mixed $value cleaned
 	 */
 	public static function clean_input( $value ) {
+		$value = wp_unslash( $value );
+
 		if ( is_array( $value ) ) {
 			return array_map( self::class . '::clean_input', $value );
 		} elseif ( is_string( $value ) ) {
@@ -189,6 +191,26 @@ class Joinchat_Util {
 		}
 
 		return $thumb;
+
+	}
+
+	/**
+	 * Return if attachment is video.
+	 *
+	 * @since    5.2.0
+	 * @access   public
+	 * @param    mixed $id attachment ID or null or empty.
+	 * @return   bool  true if is video, false otherwise
+	 */
+	public static function is_video( $id ) {
+
+		if ( intval( $id ) > 0 ) {
+			$attachment_mime = get_post_mime_type( $id );
+
+			return strpos( $attachment_mime, 'video/' ) === 0;
+		}
+
+		return false;
 
 	}
 
@@ -385,16 +407,22 @@ class Joinchat_Util {
 	}
 
 	/**
-	 * Is Joinchat admin screen
+	 * Is Joinchat settings admin screen
 	 *
 	 * @since    5.0.0
+	 * @since    5.2.1 added $include_onboard param.
+	 * @param bool $include_onboard Include onboard page.
 	 * @return bool
 	 */
-	public static function is_admin_screen() {
+	public static function is_admin_screen( $include_onboard = false ) {
 
-		$current_screen = get_current_screen();
+		if ( did_action( 'load_joinchat_settings_page' ) ) {
+			return true;
+		} elseif ( $include_onboard && did_action( 'load_joinchat_onboard_page' ) ) {
+			return true;
+		}
 
-		return null !== $current_screen && false !== strpos( $current_screen->id, '_joinchat' );
+		return false;
 
 	}
 

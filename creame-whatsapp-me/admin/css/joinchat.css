@@ -9,6 +9,17 @@
 
 .joinchat-dimmed {
   opacity: .33;
+  transition: opacity 0.2s;
+}
+
+#joinchat_form ::-moz-placeholder {
+  font-style: italic;
+  opacity: .5;
+}
+
+#joinchat_form ::placeholder {
+  font-style: italic;
+  opacity: .5;
 }
 
 .js #joinchat_form textarea {
@@ -78,6 +89,10 @@
   color: #fff;
 }
 
+.joinchat-cookies-notice {
+  font-style: italic;
+}
+
 #tab-panel-styles-and-vars span {
   white-space: nowrap;
 }
@@ -107,6 +122,14 @@
   background: #25d366 var(--joinchat-ico) no-repeat center;
   box-shadow: 1px 6px 24px 0 rgba(7, 94, 84, .24);
   overflow: hidden;
+}
+
+#joinchat_button_image_holder img,
+#joinchat_button_image_holder video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
 }
 
 [dir=rtl] #joinchat_button_image_wrapper {
@@ -159,6 +182,11 @@ tr.joinchat--focus .joinchat_vars_help {
   .iti {
     width: 18em;
   }
+}
+
+#joinchat_form input[type=number] {
+  padding-right: 0;
+  text-align: center;
 }
 
 #joinchat_form .iris-picker {
@@ -265,19 +293,12 @@ tr.joinchat--focus .joinchat_vars_help {
   opacity: .5;
 }
 
-.joinchat-metabox input::-moz-placeholder,
-.joinchat-metabox textarea::-moz-placeholder {
-  color: #dedfe0;
+.joinchat-metabox ::-moz-placeholder {
+  opacity: .5;
 }
 
-.joinchat-metabox input::placeholder,
-.joinchat-metabox textarea::placeholder {
-  color: #dedfe0;
-}
-
-.joinchat-metabox input::-ms-input-placeholder,
-.joinchat-metabox textarea::-ms-input-placeholder {
-  color: #dedfe0;
+.joinchat-metabox ::placeholder {
+  opacity: .5;
 }
 
 .joinchat-metabox input[type=radio] {
