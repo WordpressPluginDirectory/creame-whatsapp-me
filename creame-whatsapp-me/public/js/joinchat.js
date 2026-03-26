@@ -153,7 +153,12 @@
 
     this.chatbox = true;
     this.showed_at = Date.now(); // Avoid faux clicks
+
+    clearTimeout(this.open_text_anim_timeout);
     this.$div.classList.add('joinchat--chatbox');
+    // In two steps to trigger animation
+    this.$div.classList.add('joinchat--opening');
+    this.open_text_anim_timeout = setTimeout(() => this.$div.classList.remove('joinchat--opening'), 550);
 
     if (this.settings.message_badge) {
       this.$('.joinchat__badge').classList.replace('joinchat__badge--in', 'joinchat__badge--out');
@@ -167,7 +172,8 @@
     if (!this.chatbox) return;
 
     this.chatbox = false;
-    this.$div.classList.remove('joinchat--chatbox', 'joinchat--tooltip');
+    clearTimeout(this.open_text_anim_timeout);
+    this.$div.classList.remove('joinchat--chatbox', 'joinchat--tooltip', 'joinchat--opening');
 
     if (this.settings.message_badge) {
       this.$('.joinchat__badge').classList.remove('joinchat__badge--out');
@@ -307,12 +313,6 @@
     // Opt-in toggle
     joinchat_obj.$('#joinchat_optin')?.addEventListener('change', e => joinchat_obj.$div.classList.toggle('joinchat--optout', !e.target.checked));
 
-    // Only scroll Joinchat message box (no all body)
-    joinchat_obj.$('.joinchat__scroll')?.addEventListener('wheel', function (e) {
-      e.preventDefault();
-      this.scrollTop += e.deltaY;
-    }, { passive: false });
-
     // Mobile enhancements
     if (joinchat_obj.is_mobile) {
       let timeout_kb, timeout_resize;
@@ -385,37 +385,70 @@
       // Random text
       if (has_cta) joinchat_obj.rand_text(jc_chat);
 
+      // Set data-src to src (for delayed loading)
+      joinchat_obj.$$('[data-src]').forEach(el => {
+        el.setAttribute('src', el.dataset.src);
+        el.removeAttribute('data-src');
+      });
+
+      // Animate height growth on any child/class mutation
+      if (!window.matchMedia('(prefers-reduced-motion)').matches) {
+        // Hide before observe
+        if (jc_bubbles.length > 1) {
+          jc_bubbles.forEach(bubble => bubble.classList.add('joinchat--hidden'));
+          joinchat_obj.$('.joinchat__optin')?.classList.add('joinchat--hidden');
+        }
+
+        let prev_height = jc_chat.offsetHeight;
+        let anim_timeout;
+
+        // Observe DOM mutations
+        const observer = new MutationObserver(() => {
+          if (jc_scroll.scrollHeight > jc_scroll.offsetHeight) observer.disconnect();
+
+          const new_height = jc_chat.offsetHeight;
+          clearTimeout(anim_timeout);
+          jc_chat.style.height = `${prev_height}px`;
+          jc_chat.offsetHeight; // force reflow
+          jc_chat.style.height = `${new_height}px`;
+          prev_height = new_height;
+          anim_timeout = setTimeout(() => {
+            jc_chat.style.height = '';
+            prev_height = jc_chat.offsetHeight; // Capture new height after animation (image, video)
+          }, 205);
+        });
+        observer.observe(jc_chat, { childList: true, attributes: true, attributeFilter: ['class'] });
+      }
+
       // Bubbles animated (show one by one)
       if (jc_bubbles.length <= 1 || window.matchMedia('(prefers-reduced-motion)').matches) {
         setTimeout(() => jc_chat.dispatchEvent(new Event('joinchat:bubbles')), 1); // Need delay (to trigger after joinchat:show)
         return;
       }
 
-      jc_bubbles.forEach(bubble => bubble.classList.add('joinchat--hidden'));
-      joinchat_obj.$('.joinchat__optin')?.classList.add('joinchat--hidden');
-
       let index = 0;
       const random = (min, max) => Math.round(Math.random() * (max - min) + min);
       const showBubble = (bubble, next_delay) => {
         joinchat_obj.$('.joinchat__bubble--loading')?.remove();
         bubble.classList.remove('joinchat--hidden');
-        jc_scroll.scrollTop = jc_scroll.scrollHeight;
+        jc_chat.parentNode.scrollIntoView({ behavior: 'smooth', block: 'end' });
         setTimeout(nextBubble, next_delay);
-      }
+      };
       const nextBubble = () => {
         if (index >= jc_bubbles.length) {
           joinchat_obj.$('.joinchat__optin')?.classList.remove('joinchat--hidden');
+          jc_chat.parentNode.scrollIntoView({ behavior: 'smooth', block: 'end' });
           jc_chat.dispatchEvent(new Event('joinchat:bubbles')); // All bubbles shown
           return;
         }
 
         const bubble = jc_bubbles[index++];
         if (bubble.classList.contains('joinchat__bubble--note')) {
-          showBubble(bubble, 100);
+          showBubble(bubble, 210);
         } else {
           jc_chat.insertAdjacentHTML('beforeend', '<div class="joinchat__bubble joinchat__bubble--loading"></div>');
-          jc_scroll.scrollTop = jc_scroll.scrollHeight;
-          setTimeout(() => showBubble(bubble, random(400, 600)), (bubble.textContent.split(/\s+/).length * 60) + random(100, 200)); // Delay (word count * time) + random delay
+          jc_chat.parentNode.scrollIntoView({ behavior: 'smooth', block: 'end' });
+          setTimeout(() => showBubble(bubble, random(400, 600)), Math.min((bubble.textContent.split(/\s+/).length * 60) + 210, 3000)); // Delay (word count * time) + animation delay
         }
       };
       nextBubble();
