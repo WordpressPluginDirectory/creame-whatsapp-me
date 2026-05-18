@@ -5,6 +5,8 @@
  * @package    Joinchat
  */
 
+defined( 'WPINC' ) || exit;
+
 /**
  * The public-facing functionality of the plugin.
  *
@@ -80,6 +82,16 @@ class Joinchat_Public {
 		$settings['qr']            = 'yes' === $settings['qr'];
 		$settings['message_badge'] = 'yes' === $settings['message_badge'] && '' !== $settings['message_text'];
 		$settings['optin_check']   = 'yes' === $settings['optin_check'];
+		$settings['show_brand']    = 'yes' === $settings['show_brand'];
+		$settings['tracking']      = 'yes' === $settings['tracking'];
+
+		if ( $settings['tracking'] ) {
+			$settings['tracking_url'] = Joinchat_Tracking::rest_url();
+
+			if ( Joinchat_Tracking::requires_nonce() ) {
+				$settings['tracking_nonce'] = wp_create_nonce( Joinchat_Tracking::NONCE_ACTION );
+			}
+		}
 
 		if ( empty( $settings['gads'] ) ) {
 			unset( $settings['gads'] );
@@ -146,7 +158,7 @@ class Joinchat_Public {
 		// view: https://make.wordpress.org/core/2025/11/18/wordpress-6-9-frontend-performance-field-guide/#introduce-the-template-enhancement-output-buffer
 		// view: https://wordpress.org/support/topic/wordpress-6-9-broke-site-layout-crewbloom/
 		// To fix it enqueue on header.
-		$is_wp69_classic_theme = version_compare( get_bloginfo( 'version' ), '6.9', '>=' ) && ! wp_is_block_theme();
+		$is_wp69_classic_theme = is_wp_version_compatible( '6.9' ) && ! wp_is_block_theme();
 
 		if ( ! $defer || jc_common()->preview || $is_wp69_classic_theme ) {
 			$this->enqueue_styles();
@@ -263,6 +275,8 @@ class Joinchat_Public {
 				'whatsapp_web',
 				'message_send',
 				'gads',
+				'tracking_url', // Tracking settings.
+				'tracking_nonce',
 				'ga_tracker',   // Event customize.
 				'ga_event',
 				'data_layer',
@@ -378,6 +392,8 @@ class Joinchat_Public {
 				'qr_text',
 				'custom_css',
 				'clear',
+				'show_brand',
+				'tracking',
 			)
 		);
 
@@ -385,10 +401,10 @@ class Joinchat_Public {
 
 		$data['message_send'] = Joinchat_Util::replace_variables( $data['message_send'] );
 
-		if ( '__jc__' === $settings['header'] || $is_preview ) {
+		if ( $settings['show_brand'] || $is_preview ) {
 			$powered_args = array(
-				'site' => rawurlencode( get_bloginfo( 'name' ) ),
-				'url'  => rawurlencode( home_url( $wp->request ) ),
+				'utm_medium' => 'widget',
+				'utm_source' => rawurlencode( wp_parse_url( home_url(), PHP_URL_HOST ) ),
 			);
 			$powered_lang = false !== strpos( strtolower( get_locale() ), 'es' ) ? 'es' : 'en';
 			$powered_link = add_query_arg( $powered_args, "https://join.chat/$powered_lang/powered/" );
@@ -451,7 +467,7 @@ class Joinchat_Public {
 			$joinchat_classes[] = 'joinchat--btn';
 		}
 
-		$button_label = empty( $box_content ) ? __( 'WhatsApp contact', 'creame-whatsapp-me' ) : __( 'Open chat', 'creame-whatsapp-me' );
+		$button_label = empty( $box_content ) ? __( 'WhatsApp Contact', 'creame-whatsapp-me' ) : __( 'Open Chat', 'creame-whatsapp-me' );
 		if ( $settings['button_tip'] ) {
 			$button_label = sprintf( '%s %s', $settings['button_tip'], $button_label );
 		}
