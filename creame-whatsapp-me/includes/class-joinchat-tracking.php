@@ -23,6 +23,11 @@ class Joinchat_Tracking {
 	const OPTION_NAME = 'joinchat_tracking_clicks';
 
 	/**
+	 * Option name used to store recent event fingerprints for deduplication.
+	 */
+	const OPTION_DEDUP = 'joinchat_tracking_dedup';
+
+	/**
 	 * REST namespace.
 	 */
 	const REST_NAMESPACE = 'joinchat/v1';
@@ -36,6 +41,11 @@ class Joinchat_Tracking {
 	 * REST nonce action.
 	 */
 	const NONCE_ACTION = 'joinchat_rest';
+
+	/**
+	 * Deduplication window in seconds.
+	 */
+	const DEDUP_WINDOW = 60;
 
 	/**
 	 * Cache for tracking enabled status.
@@ -120,8 +130,26 @@ class Joinchat_Tracking {
 			return new WP_Error( 'joinchat_tracking_disabled', 'Tracking is disabled.', array( 'status' => 400 ) );
 		}
 
+		// Fail silently for invalid requests to avoid exposing endpoint details to bots/scripts.
 		if ( self::requires_nonce() && ! $this->verify_nonce( $request ) ) {
-			return new WP_Error( 'joinchat_tracking_invalid_nonce', 'Invalid nonce.', array( 'status' => 403 ) );
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				return new WP_Error( 'joinchat_invalid_nonce', 'Invalid nonce.', array( 'status' => 403 ) );
+			}
+			return rest_ensure_response( array( 'success' => true ) );
+		}
+
+		if ( ! is_user_logged_in() && $this->is_known_bot( $request ) ) {
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				return new WP_Error( 'joinchat_bot_detected', 'Bot or crawler detected.', array( 'status' => 403 ) );
+			}
+			return rest_ensure_response( array( 'success' => true ) );
+		}
+
+		if ( ! is_user_logged_in() && $this->is_duplicate_event( $request ) ) {
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				return new WP_Error( 'joinchat_duplicate_event', 'Duplicate event detected.', array( 'status' => 429 ) );
+			}
+			return rest_ensure_response( array( 'success' => true ) );
 		}
 
 		$data = array(
@@ -198,6 +226,153 @@ class Joinchat_Tracking {
 		}
 
 		return (bool) wp_verify_nonce( $nonce, self::NONCE_ACTION );
+	}
+
+	/**
+	 * Check if request is from a known bot/crawler/automation tool.
+	 *
+	 * Detects common bots and scripts that shouldn't trigger click events.
+	 * This prevents automated crawlers, monitoring tools, and scripts from
+	 * inflating click metrics.
+	 *
+	 * @since 6.2.2
+	 * @param WP_REST_Request $request Request instance.
+	 * @return bool True if request is from a known bot, false otherwise.
+	 */
+	private function is_known_bot( WP_REST_Request $request ) {
+
+		$user_agent = strtolower( (string) $request->get_header( 'User-Agent' ) );
+
+		if ( empty( $user_agent ) ) {
+			return true;
+		}
+
+		$bot_patterns = array(
+			// Search engine bots.
+			'googlebot',
+			'bingbot',
+			'slurp',
+			'duckduckbot',
+			'baiduspider',
+			'yandexbot',
+			'exabot',
+			'facebookexternalhit',
+			'twitterbot',
+			'linkedinbot',
+			'whatsapp',
+			'telegrambot',
+			'slackbot',
+			'discordbot',
+
+			// Monitoring & analytics bots.
+			'uptimerobot',
+			'pingdom',
+			'monitoring',
+			'newrelic',
+			'datadoghq',
+			'elastic',
+			'semrush',
+			'ahrefs',
+			'majestic',
+			'similarweb',
+
+			// Common crawlers & scrapers.
+			'curl',
+			'wget',
+			'python',
+			'requests',
+			'scrapy',
+			'selenium',
+			'phantomjs',
+			'headless',
+			'puppeteer',
+			'playwright',
+
+			// Other automation.
+			'postman',
+			'insomnia',
+			'apifox',
+			'jmeter',
+			'appium',
+			'okhttp',
+			'httpclient',
+
+			// Generic empty or suspicious patterns.
+			'bot',
+			'crawler',
+			'spider',
+			'scraper',
+			'downloader',
+		);
+
+		foreach ( $bot_patterns as $pattern ) {
+			if ( false !== stripos( $user_agent, $pattern ) ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Get client fingerprint hash for deduplication.
+	 *
+	 * Combines: client IP, user agent, channel, and chat ID.
+	 * Used to detect and block automated/duplicate click events.
+	 *
+	 * @since 6.2.2
+	 * @param WP_REST_Request $request Request instance.
+	 * @return string SHA256 fingerprint hash.
+	 */
+	private function get_event_fingerprint( WP_REST_Request $request ) {
+
+		$client_ip    = Joinchat_Util::get_client_ip();
+		$user_agent   = (string) $request->get_header( 'User-Agent' );
+		$chat_channel = sanitize_text_field( (string) $request->get_param( 'chat_channel' ) );
+		$chat_id      = sanitize_text_field( (string) $request->get_param( 'chat_id' ) );
+
+		// Combine all factors into a fingerprint string.
+		$fingerprint_data = sprintf(
+			'%s|%s|%s|%s',
+			empty( $client_ip ) ? 'unknown' : $client_ip,
+			$user_agent,
+			$chat_channel,
+			$chat_id
+		);
+
+		return hash( 'sha256', $fingerprint_data );
+	}
+
+	/**
+	 * Check if an event is a duplicate within the dedup window and store its fingerprint if not.
+	 *
+	 * @since 6.2.2
+	 * @param WP_REST_Request $request Request instance.
+	 * @return bool True if event appears to be duplicate, false otherwise.
+	 */
+	private function is_duplicate_event( WP_REST_Request $request ) {
+
+		$fingerprint = $this->get_event_fingerprint( $request );
+		$stored_data = (array) get_option( self::OPTION_DEDUP, array() );
+
+		// Clean expired entries (older than DEDUP_WINDOW).
+		$current_time = current_time( 'timestamp' );
+		$stored_data  = array_filter(
+			$stored_data,
+			function( $timestamp ) use ( $current_time ) {
+				return ( $current_time - (int) $timestamp ) < self::DEDUP_WINDOW;
+			}
+		);
+
+		if ( isset( $stored_data[ $fingerprint ] ) ) {
+			return true;
+		}
+
+		// Add this fingerprint with current timestamp.
+		$stored_data[ $fingerprint ] = $current_time;
+		update_option( self::OPTION_DEDUP, $stored_data, false );
+
+		return false;
 	}
 
 	/**
@@ -373,15 +548,17 @@ class Joinchat_Tracking {
 		?>
 <div style="background:#fff;border:1px solid #dcdcde;border-radius:4px;padding:10px 8px 0;">
 	<style>
+		#joinchat_tracking_widget .postbox-header h2 { justify-content:flex-start; }
+		#joinchat_tracking_widget .postbox-header h2::before {content:''; width:20px; height:20px; margin:-2px 8px 0 -4px; background:url(<?php echo esc_url( plugin_dir_url( JOINCHAT_FILE ) . 'admin/img/menu-icon.svg' ); ?>) !important; filter:invert(1); }
 		.joinchat-tracking-svg .chart-y-grid { stroke:#e2e4e7; stroke-width:1; }
 		.joinchat-tracking-svg .chart-y-label { text-anchor:start; font-size:11px; fill:#646970; }
 		.joinchat-tracking-svg .chart-dot { stroke:#3a87c6; stroke-width:1.5; }
 		.joinchat-tracking-svg .chart-tip-box { fill:#fff; stroke:#dcdcde; stroke-width:1; }
 		.joinchat-tracking-svg .chart-tip-day { text-anchor:middle; font-size:13px; font-weight:500; fill:#333; }
 		.joinchat-tracking-svg .chart-tip-num { text-anchor:middle; font-size:14px; font-weight:600; fill:#1d1d1d; }
-		.joinchat-tracking-svg .chart-point { cursor: pointer; }
-		.joinchat-tracking-svg .chart-tip { opacity: 0; transition: opacity 0.2s ease-in-out; pointer-events: none; }
-		.joinchat-tracking-svg .chart-point:hover .chart-tip { opacity: 1; }
+		.joinchat-tracking-svg .chart-point { cursor:pointer; }
+		.joinchat-tracking-svg .chart-tip { opacity:0; transition:opacity 0.2s ease-in-out; pointer-events:none; }
+		.joinchat-tracking-svg .chart-point:hover .chart-tip { opacity:1; }
 	</style>
 	<svg class="joinchat-tracking-svg" viewBox="0 0 <?php echo (int) $width; ?> <?php echo (int) $height; ?>" role="img" aria-label="<?php echo esc_attr__( 'Joinchat clicks over the last 30 days', 'creame-whatsapp-me' ); ?>" style="display:block;width:100%;height:auto;overflow:visible;">
 		<?php foreach ( $y_scale_rows as $scale_row ) : ?>
