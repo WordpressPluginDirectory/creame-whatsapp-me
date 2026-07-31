@@ -356,7 +356,7 @@ class Joinchat_Admin_Page {
 
 			switch ( $field_id ) {
 				case 'telephone':
-					$output = '<input id="joinchat_phone" ' . ( jc_common()->get_intltel() ? 'data-' : '' ) . 'name="joinchat[telephone]" value="' . esc_attr( $value ) . '" type="text" style="width:15em;display:inline-block"> ' .
+					$output = '<input id="joinchat_phone" ' . ( jc_common()->get_iti_version() ? 'data-' : '' ) . 'name="joinchat[telephone]" value="' . esc_attr( $value ) . '" type="text" style="width:15em;display:inline-block"> ' .
 						'<input id="joinchat_phone_test" type="button" value="' . esc_attr__( 'Test Number', 'creame-whatsapp-me' ) . '" class="button" ' . ( empty( $value ) ? 'disabled' : '' ) . '>' .
 						'<p class="description">' . wp_kses( __( "WhatsApp contact number <strong>(the button will not be shown if it's empty)</strong>", 'creame-whatsapp-me' ), array( 'strong' => array() ) ) . '</p>';
 					break;
@@ -644,7 +644,7 @@ class Joinchat_Admin_Page {
 			'<p class="description">' . esc_html__( 'Only if "Call to Action" is defined.', 'creame-whatsapp-me' ) . ' ' .
 			esc_html__( 'You can also use other triggers to show Chat Window', 'creame-whatsapp-me' ) . ' ' .
 			' <a class="joinchat-show-help" href="#tab-link-triggers" title="' . esc_html__( 'Show Help', 'creame-whatsapp-me' ) . '">?</a>' .
-			'<br><small class="joinchat-cookies-notice">' . esc_html__( 'This feature requires the use of cookies', 'creame-whatsapp-me' ) . ' ' .
+			'<br><small class="joinchat-cookies-notice">' . esc_html__( 'For this function to work correctly, data may be stored in the browser (LocalStorage).', 'creame-whatsapp-me' ) . ' ' .
 			sprintf( '<a href="%s" target="_blank">%s</a>', esc_url_raw( admin_url( 'options-privacy.php?tab=policyguide' ) ), esc_html__( 'Privacy Policy Guide' ) ) . '</small></p>'; // phpcs:ignore WordPress.WP.I18n.MissingArgDomain
 
 		echo apply_filters( 'joinchat_field_output', $output, 'auto_open', jc_common()->settings ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
@@ -901,9 +901,9 @@ class Joinchat_Admin_Page {
 		wp_enqueue_media();
 
 		// Enqueue IntlTelInput assets.
-		if ( jc_common()->get_intltel() ) {
-			$js_deps[]  = 'intl-tel-input';
-			$css_deps[] = 'intl-tel-input';
+		if ( jc_common()->get_iti_version() ) {
+			$js_deps[]  = 'joinchat-iti';
+			$css_deps[] = 'joinchat-iti';
 		}
 
 		// Enqueue styles.

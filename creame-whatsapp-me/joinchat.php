@@ -7,10 +7,10 @@
  * @package           Joinchat
  *
  * @wordpress-plugin
- * Plugin Name:       Joinchat
+ * Plugin Name:       Joinchat - Enhanced "click to chat"
  * Plugin URI:        https://join.chat
  * Description:       Connects a WordPress chat with WhatsApp. The best solution for marketing and support. Stop losing customers and increase your sales.
- * Version:           6.2.3
+ * Version:           6.3.2
  * Author:            Creame
  * Author URI:        https://crea.me
  * License:           GPL-2.0+
@@ -27,7 +27,7 @@ if ( ! defined( 'WPINC' ) ) {
 /**
  * Define constants.
  */
-define( 'JOINCHAT_VERSION', '6.2.3' );
+define( 'JOINCHAT_VERSION', '6.3.2' );
 define( 'JOINCHAT_SLUG', 'joinchat' );
 define( 'JOINCHAT_FILE', __FILE__ );
 define( 'JOINCHAT_DIR', plugin_dir_path( JOINCHAT_FILE ) );
@@ -49,7 +49,7 @@ require JOINCHAT_DIR . 'includes/class-joinchat.php';
  * @since    1.0.0
  * @since    3.0.0     Replaced direct run() to launch via 'init' hook
  */
-function run_joinchat() {
+function joinchat_run() {
 
 	$plugin = new Joinchat();
 
@@ -57,4 +57,4 @@ function run_joinchat() {
 
 }
 
-run_joinchat();
+joinchat_run();

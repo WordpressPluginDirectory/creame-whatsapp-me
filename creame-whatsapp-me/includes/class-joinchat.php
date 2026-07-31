@@ -66,6 +66,7 @@ class Joinchat {
 	 * Include the following files that make up the plugin:
 	 *
 	 * - Joinchat_Loader. Orchestrates the hooks of the plugin.
+	 * - Joinchat_Common. Defines all common functionality for the plugin.
 	 * - Joinchat_i18n. Defines internationalization functionality.
 	 * - Joinchat_Integrations. Defines thrid party integrations.
 	 * - Joinchat_Util. Defines common utilities.
@@ -218,6 +219,9 @@ class Joinchat {
 		$this->loader->add_filter( 'plugin_row_meta', $plugin_admin, 'plugin_links', 10, 2 );
 		// Privacy Policy Guide.
 		$this->loader->add_action( 'admin_init', $plugin_admin, 'add_privacy_message' );
+		// Compatibility for legacy Joinchat Premium versions.
+		$this->loader->add_filter( 'joinchat_enhanced_phone', $plugin_admin, 'compat_enhanced_phone', 5 );
+		$this->loader->add_action( 'admin_notices', $plugin_admin, 'notice_enhanced_phone' );
 
 		$plugin_page = new Joinchat_Admin_Page();
 
@@ -249,7 +253,7 @@ class Joinchat {
 		}
 
 		require_once JOINCHAT_DIR . 'includes/class-joinchat-formatter.php';
-		Joinchat_Formatter::instance();
+		Joinchat_Formatter::init();
 
 		require_once JOINCHAT_DIR . 'public/class-joinchat-public.php';
 
@@ -262,6 +266,7 @@ class Joinchat {
 		$this->loader->add_action( 'wp_print_styles', $plugin_public, 'above_the_fold_styles' );
 		$this->loader->add_action( 'wp_footer', $plugin_public, 'footer_html' );
 		$this->loader->add_action( 'wp_footer', $plugin_public, 'enqueue_styles' );
+		$this->loader->add_action( 'wp_footer', $plugin_public, 'late_enqueue_styles', 30 );
 		$this->loader->add_action( 'wp_footer', $plugin_public, 'enqueue_qr_script' );
 
 		// Actions (only) for preview.
@@ -368,6 +373,10 @@ class Joinchat {
 	 * @return   bool    True if is login page, false otherwise.
 	 */
 	private function is_login() {
-		return function_exists( 'is_login' ) ? is_login() : false !== stripos( wp_login_url(), $_SERVER['SCRIPT_NAME'] ?? '' );
+		if ( function_exists( 'is_login' ) ) {
+			return is_login();
+		}
+
+		return false !== stripos( wp_login_url(), sanitize_text_field( wp_unslash( $_SERVER['SCRIPT_NAME'] ?? '' ) ) );
 	}
 }
